@@ -1,0 +1,144 @@
+/* config/styles.css */
+
+:root {
+  --primary: #2c3e50;
+  --secondary: #3498db;
+  --success: #27ae60;
+  --danger: #e74c3c;
+  --light: #ecf0f1;
+  --dark: #2c3e50;
+}
+
+/* Global */
+.stApp {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  font-family: 'Segoe UI', system-ui;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+  background: var(--primary) !important;
+  border-right: 3px solid var(--secondary);
+}
+
+[data-testid="stSidebar"] .stRadio label {
+  color: var(--light) !important;
+  transition: all 0.3s ease;
+}
+
+[data-testid="stSidebar"] .stRadio label:hover {
+  transform: translateX(5px);
+  color: var(--secondary) !important;
+}
+
+/* Titres */
+h1 {
+  color: var(--primary);
+  border-bottom: 3px solid var(--secondary);
+  padding-bottom: 0.5rem;
+  font-weight: 700 !important;
+}
+
+/* Formulaire */
+.stForm {
+  background: white;
+  border-radius: 15px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 2rem !important;
+}
+
+.stSlider .thumb {
+  background: var(--secondary) !important;
+  border: 3px solid white !important;
+}
+
+.stNumberInput input {
+  border: 2px solid var(--primary) !important;
+  border-radius: 8px !important;
+}
+
+/* Tabs */
+.stTabs [role="tablist"] {
+  gap: 10px;
+  margin-bottom: 1.5rem;
+}
+
+.stTabs [role="tab"] {
+  background: white !important;
+  border: 2px solid var(--primary) !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.stTabs [aria-selected="true"] {
+  background: var(--primary) !important;
+  color: white !important;
+  transform: scale(1.05);
+}
+
+/* Métriques */
+.stMetric {
+  background: linear-gradient(45deg, var(--primary), var(--secondary)) !important;
+  border-radius: 12px;
+  padding: 1.5rem;
+  color: white !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.stMetric label {
+  font-size: 1.1rem !important;
+  color: var(--light) !important;
+}
+
+.stMetric div {
+  font-size: 2.5rem !important;
+  font-weight: 700 !important;
+}
+
+/* Graphiques */
+[data-testid="stPlotlyChart"] {
+  border: 2px solid var(--primary);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Boutons */
+.stButton button {
+  background: var(--success) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.stButton button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+}
+
+/* Alertes */
+.stAlert {
+  border-radius: 8px !important;
+}
+
+/* Animation chargement */
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  50% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+.stSpinner > div {
+  animation: pulse 1.5s infinite;
+  background: var(--secondary) !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .stForm {
+    padding: 1rem !important;
+  }
+  
+  .stMetric div {
+    font-size: 1.8rem !important;
+  }
+}
