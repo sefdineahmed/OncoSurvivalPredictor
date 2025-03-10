@@ -1,0 +1,21 @@
+variables:
+  - name: AGE
+    label: Âge du patient
+    type: numeric
+    min: 18
+    max: 100
+    default: 50
+    column: 0
+  
+  - name: SEXE
+    label: Sexe
+    type: categorical
+    categories: ["M", "F"]
+    column: 0
+
+additional_vars:
+  - name: NouvelleVariable
+    label: "Nouvelle Variable Personnalisée"
+    type: numeric
+    min: 0
+    max: 10
