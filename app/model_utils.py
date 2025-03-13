@@ -23,7 +23,7 @@ def load_model(model_path):
 def predict_survival(model, data):
     """Prédiction du temps de survie selon le modèle utilisé."""
     
-    if hasattr(model, "predict_median"):  # CoxPHFitter
+    if hasattr(model, "predict_median"):  # CoxPHFitter (utilise `predict_median`)
         return model.predict_median(data).values[0]
     
     elif hasattr(model, "predict_survival_function"):  # CoxPHFitter (autre option)
