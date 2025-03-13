@@ -3,6 +3,8 @@ import pandas as pd
 import joblib
 import os
 import tensorflow as tf
+import numpy as np  # Importer numpy pour résoudre les erreurs liées à 'np'
+
 from preprocessing import preprocess_data  # Assurez-vous que ce module existe et est correctement importé
 
 # -------------------------------------------------------------
@@ -30,12 +32,13 @@ def predict_survival(model, data):
     """
     # Cas pour les modèles comme CoxPHFitter
     if hasattr(model, "predict_median"):  # Cox Proportionnel
-        return model.predict_median(data)[0]  # On suppose que la médiane est renvoyée sous forme de tableau, donc on prend [0]
+        pred = model.predict_median(data)
+        return pred  # Retourne directement la médiane sans tenter d'indexer un tableau
     
     # Cas pour les modèles comme RSF, GBST qui retournent des tableaux numpy
     elif hasattr(model, "predict"):  
         prediction = model.predict(data)
-        if isinstance(prediction, np.ndarray):
+        if isinstance(prediction, np.ndarray):  # Vérifie si c'est un tableau numpy
             return prediction[0]  # Prédiction dans le premier élément (même si c'est un tableau)
         else:
             return prediction  # Si ce n'est pas un tableau, renvoyez directement la prédiction
