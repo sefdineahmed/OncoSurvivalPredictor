@@ -21,7 +21,6 @@ def predict_survival(model, data):
 # Variables initiales de l'étude
 initial_features = {
     'AGE': {"label": "Âge", "type": "number", "min": 18, "max": 120, "default": 50},
-    'SEXE': {"label": "Sexe", "type": "selectbox", "options": ["Homme", "Femme"], "default": "Homme"},
     'Cardiopathie': {"label": "Cardiopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Ulceregastrique': {"label": "Ulcère gastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Douleurepigastrique': {"label": "Douleur épigastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
