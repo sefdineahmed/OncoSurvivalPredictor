@@ -1,9 +1,10 @@
+streamlit
 pandas
 numpy
-scikit-learn
-scikit-survival
 joblib
 tensorflow
+lifelines
 openpyxl
-
+scikit-learn
+scikit-survival
 
