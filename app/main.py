@@ -1,35 +1,87 @@
+
 import streamlit as st
 import pandas as pd
 import joblib
 import os
 import tensorflow as tf
-import numpy as np
-from datetime import datetime
-import plotly.express as px
+import numpy as np  # Assurez-vous que numpy est importé pour éviter l'erreur 'np' non défini
 
-from preprocessing import preprocess_data
-
-# -------------------------------------------------------------
-# Configuration
-# -------------------------------------------------------------
-
-# Chargement de la configuration depuis un fichier JSON (créer un fichier config.json)
-FEATURES_CONFIG = 'config/features.json'  # À créer avec la structure des variables
-MODELS_CONFIG = {
-    'coxph': 'models/coxph.pkl',
-    'rsf': 'models/rsf.pkl',
-    'gbst': 'models/gbst.pkl',
-    'deepsurv': 'models/deepsurv.keras'
-}
+from preprocessing import preprocess_data  # Assurez-vous que ce module existe et est correctement importé
 
 # -------------------------------------------------------------
 # Fonctions utilitaires
 # -------------------------------------------------------------
 
-def load_feature_config():
-    """Charge la configuration des variables depuis un fichier JSON"""
-    return {
-'AGE': {"label": "Âge", "type": "number", "min": 18, "max": 120, "default": 50},
+def load_model(model_path):
+    """
+    Charge un modèle pré-entraîné à partir d'un fichier.
+    Prend en charge les modèles Keras (.keras, .h5) et joblib.
+    """
+    _, ext = os.path.splitext(model_path)
+    if ext in ['.keras', '.h5']:
+        # Pour les modèles Keras, on suppose que la fonction de perte 'cox_loss'
+        # est enregistrée via @tf.keras.saving.register_keras_serializable()
+        from model_utils import cox_loss  # Assurez-vous que model_utils.py est dans le PYTHONPATH
+        return tf.keras.models.load_model(model_path, custom_objects={"cox_loss": cox_loss})
+    else:
+        return joblib.load(model_path)
+
+
+def predict_survival(model, data):
+    """
+    Effectue une prédiction de survie selon le type de modèle.
+    """
+    # Cas pour les modèles comme CoxPHFitter
+    if hasattr(model, "predict_median"):  # Cox Proportionnel
+        pred = model.predict_median(data)
+        return pred  # Retourne directement la médiane sans tenter d'indexer un tableau
+    
+    # Cas pour les modèles comme RSF, GBST qui retournent des tableaux numpy
+    elif hasattr(model, "predict"):  
+        prediction = model.predict(data)
+        if isinstance(prediction, np.ndarray):  # Vérifie si c'est un tableau numpy
+            return prediction[0]  # Prédiction dans le premier élément (même si c'est un tableau)
+        else:
+            return prediction  # Si ce n'est pas un tableau, renvoyez directement la prédiction
+    
+    # Cas pour DeepSurv (qui renvoie une sortie de type numpy.ndarray)
+    elif hasattr(model, "predict"):
+        prediction = model.predict(data)
+        return prediction[0][0]  # DeepSurv renvoie un tableau 2D, donc nous prenons la première valeur
+
+    else:
+        raise ValueError(f"Le modèle {model} ne supporte pas la prédiction de survie.")
+
+
+def clean_prediction(prediction, model_name):
+    """
+    Fonction pour nettoyer et ajuster les résultats des prédictions pour les afficher correctement.
+    """
+    if model_name == "COXPH":
+        # CoxProportionnel retourne une valeur unique, on vérifie et renvoie un nombre de mois
+        return max(prediction, 0)  # Prédiction ne peut pas être négative
+    
+    elif model_name == "RSF" or model_name == "GBST":
+        # Si les résultats sont des probabilités, on doit ajuster pour les mois
+        return max(prediction, 0)  # Ajuster pour ne pas retourner une valeur négative
+    
+    elif model_name == "DEEPSURV":
+        # DeepSurv retourne un tableau, nous devons prendre la valeur en premier élément
+        prediction = prediction[0]
+        return max(prediction, 1)  # Eviter les valeurs négatives, minimum 1 jour (ou 1 mois si nécessaire)
+    
+    else:
+        return prediction  # En cas d'erreur de modèle, renvoyer tel quel
+
+
+# -------------------------------------------------------------
+# Variables de l'étude et formulaire de saisie
+# -------------------------------------------------------------
+
+# Initialisation des champs du formulaire
+initial_features = {
+    'AGE': {"label": "Âge", "type": "number", "min": 18, "max": 120, "default": 50},
+    'SEXE': {"label": "Sexe", "type": "selectbox", "options": ["Homme", "Femme"], "default": "Homme"},
     'Cardiopathie': {"label": "Cardiopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Ulceregastrique': {"label": "Ulcère gastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Douleurepigastrique': {"label": "Douleur épigastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
@@ -40,145 +92,74 @@ def load_feature_config():
     'Infiltrant': {"label": "Infiltrant", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Stenosant': {"label": "Sténosant", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Metastases': {"label": "Métastases", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
-    'Adenopathie': {"label": "Adénopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},)
+    'Adenopathie': {"label": "Adénopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
+}
+
+
+# -------------------------------------------------------------
+# Chargement des modèles
+# -------------------------------------------------------------
+
+def load_all_models():
+    """
+    Charge tous les modèles nécessaires.
+    """
+    models = {
+        'coxph': load_model('models/coxph.pkl'),
+        'rsf': load_model('models/rsf.pkl'),
+        'gbst': load_model('models/gbst.pkl'),
+        'deepsurv': load_model('models/deepsurv.keras')
     }
+    return models
 
-def load_model(model_path):
-    """Charge un modèle avec gestion des types et erreurs"""
-    try:
-        _, ext = os.path.splitext(model_path)
-        if ext in ['.keras', '.h5']:
-            return tf.keras.models.load_model(model_path, compile=False)
-        return joblib.load(model_path)
-    except Exception as e:
-        st.error(f"Erreur de chargement du modèle {model_path}: {str(e)}")
-        return None
-
-def display_survival_curve(predictions):
-    """Affiche une courbe de survie interactive avec Plotly"""
-    fig = px.line(
-        title="Courbe de Survie Estimée",
-        x=[0, 6, 12, 18, 24, 36],
-        y=[100, 85, 70, 60, 45, 30],
-        labels={'x': 'Mois après traitement', 'y': 'Probabilité de survie (%)'}
-    )
-    st.plotly_chart(fig)
 
 # -------------------------------------------------------------
-# Interface utilisateur
+# Interface utilisateur Streamlit
 # -------------------------------------------------------------
 
-def main():
-    st.set_page_config(
-        page_title="Cancer Gastrique - Prédiction de Survie",
-        page_icon="⚕️",
-        layout="wide"
-    )
+# Titre de l'application
+st.title("Prédiction du Temps de Survie des Patients Atteints de Cancer Gastrique")
 
-    # Initialisation de l'état de session
-    if 'patient_data' not in st.session_state:
-        st.session_state.patient_data = pd.DataFrame()
+# Section du formulaire de saisie des données du patient
+st.header("Entrez les informations du patient")
+patient_inputs = {}
+for key, config in initial_features.items():
+    if config["type"] == "number":
+        patient_inputs[key] = st.number_input(
+            config["label"], min_value=config.get("min", 0),
+            max_value=config.get("max", 120),
+            value=config.get("default", 50)
+        )
+    elif config["type"] == "selectbox":
+        patient_inputs[key] = st.selectbox(
+            config["label"],
+            options=config["options"],
+            index=config["options"].index(config.get("default", config["options"][0]))
+        )
 
-    # Création des onglets
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📋 Formulaire Patient", 
-        "📊 Tableau de Bord",
-        "📈 Prédiction", 
-        "⚙️ Administration"
-    ])
+# Création d'un DataFrame avec les données saisies
+patient_data = pd.DataFrame([patient_inputs])
 
-    # Onglet Formulaire Patient
-    with tab1:
-        st.header("Informations du Patient")
-        with st.form("patient_form"):
-            cols = st.columns(3)
-            patient_inputs = {}
-            features_config = load_feature_config()
-            
-            for i, (key, config) in enumerate(features_config.items()):
-                with cols[i % 3]:
-                    if config["type"] == "number":
-                        patient_inputs[key] = st.number_input(
-                            config["label"],
-                            min_value=config.get("min", 0),
-                            max_value=config.get("max", 120),
-                            value=config.get("default", 50)
-                        )
-                    elif config["type"] == "selectbox":
-                        patient_inputs[key] = st.selectbox(
-                            config["label"],
-                            options=config["options"],
-                            index=config["options"].index(config.get("default"))
-                        )
-            
-            if st.form_submit_button("Soumettre le formulaire"):
-                patient_data = preprocess_data(pd.DataFrame([patient_inputs]))
-                st.session_state.patient_data = patient_data
-                st.success("Données patient enregistrées!")
+# Prétraitement des données
+patient_data = preprocess_data(patient_data)
 
-    # Onglet Prédiction
-    with tab3:
-        if not st.session_state.patient_data.empty:
-            st.header("Résultats de la Prédiction")
-            
-            model_choice = st.selectbox(
-                "Choisir le modèle de prédiction",
-                options=list(MODELS_CONFIG.keys())
-            )
-            
-            if st.button("Lancer la prédiction"):
-                model = load_model(MODELS_CONFIG[model_choice])
-                if model:
-                    try:
-                        prediction = model.predict(st.session_state.patient_data)
-                        st.metric(
-                            label="Temps de survie estimé", 
-                            value=f"{round(prediction[0], 1)} mois",
-                            help="Estimation médiane de survie post-traitement"
-                        )
-                        display_survival_curve(prediction)
-                    except Exception as e:
-                        st.error(f"Erreur lors de la prédiction: {str(e)}")
-        else:
-            st.info("Veuillez d'abord remplir le formulaire patient")
+# Chargement des modèles
+models = load_all_models()
 
-    # Onglet Tableau de Bord
-    with tab2:
-        st.header("Analyse des Données Patients")
-        if os.path.exists("patient_data.csv"):
-            historical_data = pd.read_csv("patient_data.csv")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Répartition par Âge")
-                age_fig = px.histogram(historical_data, x='AGE', nbins=20)
-                st.plotly_chart(age_fig)
-            
-            with col2:
-                st.subheader("Survie par Stade Clinique")
-                survival_fig = px.box(historical_data, x='Metastases', y='Survival_months')
-                st.plotly_chart(survival_fig)
-        else:
-            st.warning("Aucune donnée historique disponible")
+# Bouton pour lancer la prédiction
+if st.button("Prédire le temps de survie"):
+    st.subheader("Résultats des modèles")
 
-    # Onglet Administration
-    with tab4:
-        st.header("Paramètres Avancés")
-        with st.expander("Gestion des Modèles"):
-            uploaded_model = st.file_uploader(
-                "Uploader un nouveau modèle",
-                type=['pkl', 'joblib', 'h5', 'keras']
-            )
-            if uploaded_model:
-                save_path = os.path.join("models", uploaded_model.name)
-                with open(save_path, "wb") as f:
-                    f.write(uploaded_model.getbuffer())
-                st.success(f"Modèle {uploaded_model.name} sauvegardé!")
+    for model_name, model in models.items():
+        try:
+            pred = predict_survival(model, patient_data)
+            # Nettoyage de la prédiction pour une sortie correcte
+            cleaned_pred = clean_prediction(pred, model_name)
+            st.write(f"{model_name.upper()} : {cleaned_pred} mois")
+        except Exception as e:
+            st.error(f"Erreur avec le modèle {model_name}: {e}")
 
-        with st.expander("Journal des Prédictions"):
-            if os.path.exists("predictions_log.csv"):
-                log_data = pd.read_csv("predictions_log.csv")
-                st.dataframe(log_data.tail(10))
-
-if __name__ == "__main__":
-    main()
+# Option d'enregistrement des données (exemple, à adapter selon votre besoin)
+if st.button("Enregistrer les données du patient"):
+    patient_data.to_csv("patient_data.csv", mode='a', index=False)
+    st.success("Données enregistrées avec succès !")
