@@ -30,15 +30,21 @@ def predict_survival(model, data):
     """
     # Cas pour les modèles comme CoxPHFitter
     if hasattr(model, "predict_median"):  # Cox Proportionnel
-        return model.predict_median(data).values[0]
-    elif hasattr(model, "predict_survival_function"):  # Cox Proportionnel avec fonction de survie
-        survival_function = model.predict_survival_function(data)
-        return survival_function.iloc[0].index[0]  # Renvoie la première prédiction (temps médian)
+        return model.predict_median(data)[0]  # On suppose que la médiane est renvoyée sous forme de tableau, donc on prend [0]
     
-    # Cas pour les autres modèles comme Random Survival Forest (RSF), Gradient Boosting Survival (GBST), DeepSurv
+    # Cas pour les modèles comme RSF, GBST qui retournent des tableaux numpy
     elif hasattr(model, "predict"):  
-        return model.predict(data)[0]  # Prédiction directe (cette ligne peut être adaptée selon votre modèle)
+        prediction = model.predict(data)
+        if isinstance(prediction, np.ndarray):
+            return prediction[0]  # Prédiction dans le premier élément (même si c'est un tableau)
+        else:
+            return prediction  # Si ce n'est pas un tableau, renvoyez directement la prédiction
     
+    # Cas pour DeepSurv (qui renvoie une sortie de type numpy.ndarray)
+    elif hasattr(model, "predict"):
+        prediction = model.predict(data)
+        return prediction[0][0]  # DeepSurv renvoie un tableau 2D, donc nous prenons la première valeur
+
     else:
         raise ValueError(f"Le modèle {model} ne supporte pas la prédiction de survie.")
 
