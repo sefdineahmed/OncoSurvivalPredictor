@@ -23,7 +23,7 @@ def load_model(model_path):
 def predict_survival(model, data):
     """Prédiction du temps de survie selon le modèle utilisé."""
     
-    if hasattr(model, "predict_median"):  # CoxPHFitter (utilise `predict_median`)
+    if hasattr(model, "predict_median"):  # Si c'est un modèle CoxPHFitter
         return model.predict_median(data).values[0]
     
     elif hasattr(model, "predict_survival_function"):  # CoxPHFitter (autre option)
@@ -31,7 +31,9 @@ def predict_survival(model, data):
         return np.median(survival_function.index)  # Renvoie une estimation du temps médian
 
     elif hasattr(model, "predict"):  # RSF, GBST, et DeepSurv
-        return model.predict(data)[0]
-    
+        prediction = model.predict(data)
+        return prediction[0]  # Retourne la première prédiction (ou ajustez selon le format du modèle)
+
     else:
         raise ValueError("Le modèle fourni ne prend pas en charge la prédiction de survie.")
+
