@@ -1,30 +1,25 @@
-import os
 import joblib
-import tensorflow as tf
-
-@tf.keras.utils.register_keras_serializable()
-def cox_loss(y_true, y_pred):
-    """
-    Implémentation simplifiée de la loss de Cox.
-    Remplacez cette implémentation par celle adaptée à votre problème.
-    """
-    # Exemple simplifié : à adapter pour votre cas d'utilisation
-    return tf.reduce_mean(tf.square(y_true - y_pred))
+import numpy as np
 
 def load_model(model_path):
-    """
-    Charge un modèle pré-entraîné depuis le fichier.
-    Si l'extension est .keras ou .h5, le modèle est chargé via tf.keras.models.load_model()
-    en utilisant custom_objects pour la fonction 'cox_loss'. Sinon, joblib.load() est utilisé.
-    """
-    _, ext = os.path.splitext(model_path)
-    if ext in ['.keras', '.h5']:
-        return tf.keras.models.load_model(model_path, custom_objects={"cox_loss": cox_loss})
-    else:
-        return joblib.load(model_path)
+    """Charge un modèle pré-entraîné à partir du fichier."""
+    if model_path.endswith(".keras"):
+        from tensorflow import keras
+        return keras.models.load_model(model_path)
+    return joblib.load(model_path)
 
 def predict_survival(model, data):
-    """
-    Prédit le temps de survie à partir des données fournies.
-    """
-    return model.predict(data)
+    """Prédiction du temps de survie selon le modèle utilisé."""
+    
+    if hasattr(model, "predict_median"):  # CoxPHFitter
+        return model.predict_median(data).values[0]
+    
+    elif hasattr(model, "predict_survival_function"):  # CoxPHFitter (autre option)
+        survival_function = model.predict_survival_function(data)
+        return np.median(survival_function.index)  # Renvoie une estimation du temps médian
+
+    elif hasattr(model, "predict"):  # Random Survival Forest et autres modèles scikit-learn
+        return model.predict(data)[0]
+    
+    else:
+        raise ValueError("Le modèle fourni ne prend pas en charge la prédiction de survie.")
