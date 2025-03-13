@@ -43,12 +43,12 @@ page = st.sidebar.radio("Navigation", ["📊 Prediction", "📥 Nouveau Patient"
 @st.cache_resource
 def load_models():
     models = {
-        'Cox': joblib.load('models/cph_model.joblib'),
-        'RSF': joblib.load('models/rsf_model.joblib'),
-        'GBST': joblib.load('models/gbst_model.joblib')
+        'Cox': joblib.load('models/coxph.pkl'),
+        'RSF': joblib.load('models/rsf.pkl'),
+        'GBST': joblib.load('models/gbst.pkl')
     }
     try:
-        models['DeepSurv'] = load_model('models/best_model.keras')
+        models['DeepSurv'] = load_model('models/deepsurv.keras')
     except Exception as e:
         st.error(f"Erreur chargement Deep Learning: {str(e)}")
     return models
