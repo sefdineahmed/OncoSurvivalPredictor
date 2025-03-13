@@ -28,10 +28,19 @@ def predict_survival(model, data):
     """
     Effectue une prédiction de survie selon le type de modèle.
     """
-    if hasattr(model, "predict"):
-        return model.predict(data)
+    # Cas pour les modèles comme CoxPHFitter
+    if hasattr(model, "predict_median"):  # Cox Proportionnel
+        return model.predict_median(data).values[0]
+    elif hasattr(model, "predict_survival_function"):  # Cox Proportionnel avec fonction de survie
+        survival_function = model.predict_survival_function(data)
+        return survival_function.iloc[0].index[0]  # Renvoie la première prédiction (temps médian)
+    
+    # Cas pour les autres modèles comme Random Survival Forest (RSF), Gradient Boosting Survival (GBST), DeepSurv
+    elif hasattr(model, "predict"):  
+        return model.predict(data)[0]  # Prédiction directe (cette ligne peut être adaptée selon votre modèle)
+    
     else:
-        raise ValueError("Le modèle fourni ne supporte pas la prédiction de survie.")
+        raise ValueError(f"Le modèle {model} ne supporte pas la prédiction de survie.")
 
 
 # -------------------------------------------------------------
@@ -111,8 +120,11 @@ if st.button("Prédire le temps de survie"):
     st.subheader("Résultats des modèles")
 
     for model_name, model in models.items():
-        pred = predict_survival(model, patient_data)
-        st.write(f"{model_name.upper()} : {pred[0]} mois")
+        try:
+            pred = predict_survival(model, patient_data)
+            st.write(f"{model_name.upper()} : {pred} mois")
+        except Exception as e:
+            st.error(f"Erreur avec le modèle {model_name}: {e}")
 
 # Option d'enregistrement des données (exemple, à adapter selon votre besoin)
 if st.button("Enregistrer les données du patient"):
