@@ -1,85 +1,27 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
-import os
 import tensorflow as tf
-import numpy as np  # Assurez-vous que numpy est importé pour éviter l'erreur 'np' non défini
+from preprocessing import preprocess_data
 
-from preprocessing import preprocess_data  # Assurez-vous que ce module existe et est correctement importé
-
-# -------------------------------------------------------------
-# Fonctions utilitaires
-# -------------------------------------------------------------
-
+# Fonction de chargement des modèles (Keras ou joblib)
 def load_model(model_path):
-    """
-    Charge un modèle pré-entraîné à partir d'un fichier.
-    Prend en charge les modèles Keras (.keras, .h5) et joblib.
-    """
     _, ext = os.path.splitext(model_path)
     if ext in ['.keras', '.h5']:
-        # Pour les modèles Keras, on suppose que la fonction de perte 'cox_loss'
-        # est enregistrée via @tf.keras.saving.register_keras_serializable()
         from model_utils import cox_loss  # Assurez-vous que model_utils.py est dans le PYTHONPATH
         return tf.keras.models.load_model(model_path, custom_objects={"cox_loss": cox_loss})
     else:
         return joblib.load(model_path)
 
-
+# Fonction de prédiction générique pour les modèles de survie
 def predict_survival(model, data):
-    """
-    Effectue une prédiction de survie selon le type de modèle.
-    """
-    # Cas pour les modèles comme CoxPHFitter
-    if hasattr(model, "predict_median"):  # Cox Proportionnel
-        pred = model.predict_median(data)
-        return pred  # Retourne directement la médiane sans tenter d'indexer un tableau
-    
-    # Cas pour les modèles comme RSF, GBST qui retournent des tableaux numpy
-    elif hasattr(model, "predict"):  
-        prediction = model.predict(data)
-        if isinstance(prediction, np.ndarray):  # Vérifie si c'est un tableau numpy
-            return prediction[0]  # Prédiction dans le premier élément (même si c'est un tableau)
-        else:
-            return prediction  # Si ce n'est pas un tableau, renvoyez directement la prédiction
-    
-    # Cas pour DeepSurv (qui renvoie une sortie de type numpy.ndarray)
-    elif hasattr(model, "predict"):
-        prediction = model.predict(data)
-        return prediction[0][0]  # DeepSurv renvoie un tableau 2D, donc nous prenons la première valeur
+    return model.predict(data)
 
-    else:
-        raise ValueError(f"Le modèle {model} ne supporte pas la prédiction de survie.")
-
-
-def clean_prediction(prediction, model_name):
-    """
-    Fonction pour nettoyer et ajuster les résultats des prédictions pour les afficher correctement.
-    """
-    if model_name == "COXPH":
-        # CoxProportionnel retourne une valeur unique, on vérifie et renvoie un nombre de mois
-        return max(prediction, 0)  # Prédiction ne peut pas être négative
-    
-    elif model_name == "RSF" or model_name == "GBST":
-        # Si les résultats sont des probabilités, on doit ajuster pour les mois
-        return max(prediction, 0)  # Ajuster pour ne pas retourner une valeur négative
-    
-    elif model_name == "DEEPSURV":
-        # DeepSurv retourne un tableau, nous devons prendre la valeur en premier élément
-        prediction = prediction[0]
-        return max(prediction, 1)  # Eviter les valeurs négatives, minimum 1 jour (ou 1 mois si nécessaire)
-    
-    else:
-        return prediction  # En cas d'erreur de modèle, renvoyer tel quel
-
-
-# -------------------------------------------------------------
-# Variables de l'étude et formulaire de saisie
-# -------------------------------------------------------------
-
-# Initialisation des champs du formulaire
+# Variables initiales de l'étude
 initial_features = {
     'AGE': {"label": "Âge", "type": "number", "min": 18, "max": 120, "default": 50},
+    'SEXE': {"label": "Sexe", "type": "selectbox", "options": ["Homme", "Femme"], "default": "Homme"},
     'Cardiopathie': {"label": "Cardiopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Ulceregastrique': {"label": "Ulcère gastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Douleurepigastrique': {"label": "Douleur épigastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
@@ -93,71 +35,83 @@ initial_features = {
     'Adenopathie': {"label": "Adénopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
 }
 
+# Fonction pour ajouter de nouvelles variables (exemple)
+def add_new_feature(new_feature_name, new_feature_details):
+    initial_features[new_feature_name] = new_feature_details
 
-# -------------------------------------------------------------
 # Chargement des modèles
-# -------------------------------------------------------------
-
-def load_all_models():
-    """
-    Charge tous les modèles nécessaires.
-    """
-    models = {
-        'coxph': load_model('models/coxph.pkl'),
-        'rsf': load_model('models/rsf.pkl'),
-        'gbst': load_model('models/gbst.pkl'),
-        'deepsurv': load_model('models/deepsurv.keras')
-    }
-    return models
-
-
-# -------------------------------------------------------------
-# Interface utilisateur Streamlit
-# -------------------------------------------------------------
+cph_model    = load_model('models/coxph.pkl')
+rsf_model    = load_model('models/rsf.pkl')
+gbst_model   = load_model('models/gbst.pkl')
+deep_model   = load_model('models/deepsurv.keras')
 
 # Titre de l'application
 st.title("Prédiction du Temps de Survie des Patients Atteints de Cancer Gastrique")
 
-# Section du formulaire de saisie des données du patient
-st.header("Entrez les informations du patient")
-patient_inputs = {}
-for key, config in initial_features.items():
-    if config["type"] == "number":
-        patient_inputs[key] = st.number_input(
-            config["label"], min_value=config.get("min", 0),
-            max_value=config.get("max", 120),
-            value=config.get("default", 50)
-        )
-    elif config["type"] == "selectbox":
-        patient_inputs[key] = st.selectbox(
-            config["label"],
-            options=config["options"],
-            index=config["options"].index(config.get("default", config["options"][0]))
-        )
+# Onglet de formulaire pour la saisie des informations
+form_section = st.sidebar.selectbox("Choisir une section", ["Formulaire de saisie", "Tableau de bord", "Analyse des modèles", "Paramètres"])
 
-# Création d'un DataFrame avec les données saisies
-patient_data = pd.DataFrame([patient_inputs])
+if form_section == "Formulaire de saisie":
+    st.header("Entrez les informations du patient")
+    patient_inputs = {}
+    for key, config in initial_features.items():
+        if config["type"] == "number":
+            patient_inputs[key] = st.number_input(
+                config["label"], min_value=config.get("min", 0),
+                max_value=config.get("max", 1000),
+                value=config.get("default", 0)
+            )
+        elif config["type"] == "selectbox":
+            patient_inputs[key] = st.selectbox(
+                config["label"],
+                options=config["options"],
+                index=config["options"].index(config.get("default", config["options"][0]))
+            )
 
-# Prétraitement des données
-patient_data = preprocess_data(patient_data)
+    # Création d'un DataFrame avec les données saisies
+    patient_data = pd.DataFrame([patient_inputs])
 
-# Chargement des modèles
-models = load_all_models()
+    # Prétraitement des données (adaptation nécessaire selon votre fonction preprocess_data)
+    patient_data = preprocess_data(patient_data)
 
-# Bouton pour lancer la prédiction
-if st.button("Prédire le temps de survie"):
-    st.subheader("Résultats des modèles")
+    # Bouton pour lancer la prédiction
+    if st.button("Prédire le temps de survie"):
+        # Prédictions pour chaque modèle
+        cph_pred = predict_survival(cph_model, patient_data)
+        rsf_pred = predict_survival(rsf_model, patient_data)
+        gbst_pred = predict_survival(gbst_model, patient_data)
+        deep_pred = predict_survival(deep_model, patient_data)
 
-    for model_name, model in models.items():
-        try:
-            pred = predict_survival(model, patient_data)
-            # Nettoyage de la prédiction pour une sortie correcte
-            cleaned_pred = clean_prediction(pred, model_name)
-            st.write(f"{model_name.upper()} : {cleaned_pred} mois")
-        except Exception as e:
-            st.error(f"Erreur avec le modèle {model_name}: {e}")
+        st.subheader("Résultats des modèles")
+        st.write(f"Modèle Cox Proportionnel : {cph_pred} mois")
+        st.write(f"Random Survival Forest : {rsf_pred} mois")
+        st.write(f"Gradient Boosting Survival Tree : {gbst_pred} mois")
+        st.write(f"Deep Survival Model : {deep_pred} mois")
 
-# Option d'enregistrement des données (exemple, à adapter selon votre besoin)
-if st.button("Enregistrer les données du patient"):
-    patient_data.to_csv("patient_data.csv", mode='a', index=False)
-    st.success("Données enregistrées avec succès !")
+elif form_section == "Tableau de bord":
+    st.header("Tableau de bord des prédictions")
+    # Vous pouvez ajouter des graphiques ou autres visualisations ici en fonction des données prédites
+
+elif form_section == "Analyse des modèles":
+    st.header("Analyse des modèles")
+    # Ajoutez des outils d'analyse comparative ici
+
+elif form_section == "Paramètres":
+    st.header("Paramètres de l'application")
+    st.write("Ajoutez de nouvelles variables et ajustez les modèles ici.")
+    # Permettre à l'utilisateur d'ajouter de nouvelles variables à l'étude
+    new_feature_name = st.text_input("Nom de la nouvelle variable")
+    new_feature_label = st.text_input("Label de la nouvelle variable")
+    new_feature_type = st.selectbox("Type de la nouvelle variable", ["number", "selectbox"])
+    new_feature_options = st.text_area("Options de la variable (si applicable, séparées par des virgules)")
+    
+    if st.button("Ajouter une nouvelle variable"):
+        new_feature_details = {
+            "label": new_feature_label,
+            "type": new_feature_type,
+            "options": new_feature_options.split(",") if new_feature_type == "selectbox" else [],
+            "default": new_feature_options.split(",")[0] if new_feature_type == "selectbox" else 0
+        }
+        add_new_feature(new_feature_name, new_feature_details)
+        st.success(f"Nouvelle variable '{new_feature_name}' ajoutée avec succès!")
+
