@@ -52,6 +52,28 @@ def predict_survival(model, data):
         raise ValueError(f"Le modèle {model} ne supporte pas la prédiction de survie.")
 
 
+def clean_prediction(prediction, model_name):
+    """
+    Fonction pour nettoyer et ajuster les résultats des prédictions pour les afficher correctement.
+    """
+    # Traitement des résultats pour éviter des valeurs non réalistes (par exemple, négatives ou des tableaux)
+    if model_name == "COXPH":
+        # CoxProportionnel retourne une valeur unique, on vérifie et renvoie un nombre de mois
+        return max(prediction, 0)  # Prédiction ne peut pas être négative
+    
+    elif model_name == "RSF" or model_name == "GBST":
+        # Si les résultats sont des probabilités, on doit ajuster pour les mois
+        return max(prediction, 0)  # Ajuster pour ne pas retourner une valeur négative
+    
+    elif model_name == "DEEPSURV":
+        # DeepSurv retourne un tableau, nous devons prendre la valeur en premier élément
+        prediction = prediction[0]
+        return max(prediction, 0)  # Eviter les valeurs négatives
+    
+    else:
+        return prediction  # En cas d'erreur de modèle, renvoyer tel quel
+
+
 # -------------------------------------------------------------
 # Variables de l'étude et formulaire de saisie
 # -------------------------------------------------------------
@@ -130,7 +152,9 @@ if st.button("Prédire le temps de survie"):
     for model_name, model in models.items():
         try:
             pred = predict_survival(model, patient_data)
-            st.write(f"{model_name.upper()} : {pred} mois")
+            # Nettoyage de la prédiction pour une sortie correcte
+            cleaned_pred = clean_prediction(pred, model_name)
+            st.write(f"{model_name.upper()} : {cleaned_pred} mois")
         except Exception as e:
             st.error(f"Erreur avec le modèle {model_name}: {e}")
 
