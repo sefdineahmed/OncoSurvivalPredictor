@@ -5,9 +5,9 @@ from model_utils import load_model, predict_survival
 from preprocessing import preprocess_data
 
 # Charger les modèles
-cph_model = load_model('models/coxph.joblib')
-rsf_model = load_model('models/rsf.joblib')
-gbst_model = load_model('models/gbst.joblib')
+cph_model = load_model('models/coxph.pkl')
+rsf_model = load_model('models/rsf.pkl')
+gbst_model = load_model('models/gbst.pkl')
 deep_model = load_model('models/deepsurv.keras')
 
 # Titre de l'application
