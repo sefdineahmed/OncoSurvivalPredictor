@@ -3,11 +3,17 @@ import pandas as pd
 import joblib
 import os
 import tensorflow as tf
+from preprocessing import preprocess_data  # Assurez-vous que ce module existe et est correctement importé
 
-from preprocessing import preprocess_data
+# -------------------------------------------------------------
+# Fonctions utilitaires
+# -------------------------------------------------------------
 
-# Fonction de chargement des modèles (Keras ou joblib)
 def load_model(model_path):
+    """
+    Charge un modèle pré-entraîné à partir d'un fichier.
+    Prend en charge les modèles Keras (.keras, .h5) et joblib.
+    """
     _, ext = os.path.splitext(model_path)
     if ext in ['.keras', '.h5']:
         # Pour les modèles Keras, on suppose que la fonction de perte 'cox_loss'
@@ -17,16 +23,22 @@ def load_model(model_path):
     else:
         return joblib.load(model_path)
 
-# Fonction de prédiction générique pour les modèles de survie
-def predict_survival(model, data):
-    # Vous pouvez adapter cette fonction selon le type de sortie de chaque modèle
-    # Par exemple, pour Cox, on pourrait retourner la médiane prédite,
-    # tandis que pour d'autres modèles on renvoie la prédiction directe.
-    # Ici, on suppose que model.predict(data) retourne une valeur lisible.
-    return model.predict(data)
 
-# Variables de l'étude (initiales)
-# Ces variables peuvent être étendues facilement en ajoutant de nouveaux champs dans le formulaire
+def predict_survival(model, data):
+    """
+    Effectue une prédiction de survie selon le type de modèle.
+    """
+    if hasattr(model, "predict"):
+        return model.predict(data)
+    else:
+        raise ValueError("Le modèle fourni ne supporte pas la prédiction de survie.")
+
+
+# -------------------------------------------------------------
+# Variables de l'étude et formulaire de saisie
+# -------------------------------------------------------------
+
+# Initialisation des champs du formulaire
 initial_features = {
     'AGE': {"label": "Âge", "type": "number", "min": 18, "max": 120, "default": 50},
     'SEXE': {"label": "Sexe", "type": "selectbox", "options": ["Homme", "Femme"], "default": "Homme"},
@@ -43,24 +55,40 @@ initial_features = {
     'Adenopathie': {"label": "Adénopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
 }
 
+
+# -------------------------------------------------------------
 # Chargement des modèles
-cph_model    = load_model('models/coxph.pkl')
-rsf_model    = load_model('models/rsf.pkl')
-gbst_model   = load_model('models/gbst.pkl')
-deep_model   = load_model('models/deepsurv.keras')
+# -------------------------------------------------------------
+
+def load_all_models():
+    """
+    Charge tous les modèles nécessaires.
+    """
+    models = {
+        'coxph': load_model('models/coxph.pkl'),
+        'rsf': load_model('models/rsf.pkl'),
+        'gbst': load_model('models/gbst.pkl'),
+        'deepsurv': load_model('models/deepsurv.keras')
+    }
+    return models
+
+
+# -------------------------------------------------------------
+# Interface utilisateur Streamlit
+# -------------------------------------------------------------
 
 # Titre de l'application
 st.title("Prédiction du Temps de Survie des Patients Atteints de Cancer Gastrique")
 
-# Section du formulaire de saisie
+# Section du formulaire de saisie des données du patient
 st.header("Entrez les informations du patient")
 patient_inputs = {}
 for key, config in initial_features.items():
     if config["type"] == "number":
         patient_inputs[key] = st.number_input(
             config["label"], min_value=config.get("min", 0),
-            max_value=config.get("max", 1000),
-            value=config.get("default", 0)
+            max_value=config.get("max", 120),
+            value=config.get("default", 50)
         )
     elif config["type"] == "selectbox":
         patient_inputs[key] = st.selectbox(
@@ -68,30 +96,25 @@ for key, config in initial_features.items():
             options=config["options"],
             index=config["options"].index(config.get("default", config["options"][0]))
         )
-    # Vous pouvez ajouter d'autres types de champs si nécessaire
 
 # Création d'un DataFrame avec les données saisies
 patient_data = pd.DataFrame([patient_inputs])
 
-# Prétraitement des données (adaptation nécessaire selon votre fonction preprocess_data)
+# Prétraitement des données
 patient_data = preprocess_data(patient_data)
+
+# Chargement des modèles
+models = load_all_models()
 
 # Bouton pour lancer la prédiction
 if st.button("Prédire le temps de survie"):
-    # Prédictions pour chaque modèle
-    cph_pred    = predict_survival(cph_model, patient_data)
-    rsf_pred    = predict_survival(rsf_model, patient_data)
-    gbst_pred   = predict_survival(gbst_model, patient_data)
-    deep_pred   = predict_survival(deep_model, patient_data)
-    
     st.subheader("Résultats des modèles")
-    st.write(f"Modèle Cox Proportionnel : {cph_pred} mois")
-    st.write(f"Random Survival Forest : {rsf_pred} mois")
-    st.write(f"Gradient Boosting Survival Tree : {gbst_pred} mois")
-    st.write(f"Deep Survival Model : {deep_pred} mois")
+
+    for model_name, model in models.items():
+        pred = predict_survival(model, patient_data)
+        st.write(f"{model_name.upper()} : {pred[0]} mois")
 
 # Option d'enregistrement des données (exemple, à adapter selon votre besoin)
 if st.button("Enregistrer les données du patient"):
-    # Ici, vous pouvez sauvegarder les données dans un fichier ou une base de données
     patient_data.to_csv("patient_data.csv", mode='a', index=False)
     st.success("Données enregistrées avec succès !")
