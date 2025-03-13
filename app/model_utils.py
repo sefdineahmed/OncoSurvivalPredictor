@@ -2,7 +2,7 @@ import os
 import joblib
 import tensorflow as tf
 
-@tf.keras.saving.register_keras_serializable()
+@tf.keras.utils.register_keras_serializable()
 def cox_loss(y_true, y_pred):
     """
     Implémentation simplifiée de la loss de Cox.
