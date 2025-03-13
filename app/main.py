@@ -3,7 +3,7 @@ import pandas as pd
 import joblib
 import os
 import tensorflow as tf
-import numpy as np  # Importer numpy pour résoudre les erreurs liées à 'np'
+import numpy as np  # Assurez-vous que numpy est importé pour éviter l'erreur 'np' non défini
 
 from preprocessing import preprocess_data  # Assurez-vous que ce module existe et est correctement importé
 
@@ -56,7 +56,6 @@ def clean_prediction(prediction, model_name):
     """
     Fonction pour nettoyer et ajuster les résultats des prédictions pour les afficher correctement.
     """
-    # Traitement des résultats pour éviter des valeurs non réalistes (par exemple, négatives ou des tableaux)
     if model_name == "COXPH":
         # CoxProportionnel retourne une valeur unique, on vérifie et renvoie un nombre de mois
         return max(prediction, 0)  # Prédiction ne peut pas être négative
@@ -68,7 +67,7 @@ def clean_prediction(prediction, model_name):
     elif model_name == "DEEPSURV":
         # DeepSurv retourne un tableau, nous devons prendre la valeur en premier élément
         prediction = prediction[0]
-        return max(prediction, 0)  # Eviter les valeurs négatives
+        return max(prediction, 1)  # Eviter les valeurs négatives, minimum 1 jour (ou 1 mois si nécessaire)
     
     else:
         return prediction  # En cas d'erreur de modèle, renvoyer tel quel
@@ -81,6 +80,7 @@ def clean_prediction(prediction, model_name):
 # Initialisation des champs du formulaire
 initial_features = {
     'AGE': {"label": "Âge", "type": "number", "min": 18, "max": 120, "default": 50},
+    'SEXE': {"label": "Sexe", "type": "selectbox", "options": ["Homme", "Femme"], "default": "Homme"},
     'Cardiopathie': {"label": "Cardiopathie", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Ulceregastrique': {"label": "Ulcère gastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
     'Douleurepigastrique': {"label": "Douleur épigastrique", "type": "selectbox", "options": ["Oui", "Non"], "default": "Non"},
